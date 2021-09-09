@@ -5,10 +5,10 @@ package main
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"io/ioutil"
 	"math/big"
 	"net/http"
@@ -99,14 +99,21 @@ func getVal(maxInt *big.Int, data []byte, status Status) {
 	saltBytes, _ := hex.DecodeString(fmt.Sprintf("%064s", salt))
 
 	saltInt := big.NewInt(0)
-	saltInt.SetString(salt, 16)
+	saltInt.SetBytes(saltBytes)
 
-	luck := sha256.Sum256(append(data, saltBytes...))
+	hash := sha3.NewKeccak256()
+	hash.Write(append(data, saltBytes...))
+	luck := hash.Sum(nil)
+
+	fmt.Println(hex.EncodeToString(append(data, saltBytes...)))
+	fmt.Println("saltInt -> ", saltInt)
 
 	val := big.NewInt(0)
-	val.SetString(hex.EncodeToString(luck[:]), 16)
+	val.SetBytes(luck)
 
 	dv := new(big.Int).Div(maxInt, status.Difficulty)
+
+	fmt.Println("val luck -> ", val)
 
 	if val.Cmp(dv) < 1 {
 		fmt.Println("saltInt -> ", saltInt)
@@ -139,11 +146,11 @@ func main() {
 	data = append(data, moonstoneID...)
 	data = append(data, nonce...)
 
-	// getVal(maxInt, data, status)
+	getVal(maxInt, data, status)
 
-	// if 0 == 0 {
-	// 	return
-	// }
+	if 0 == 0 {
+		return
+	}
 
 	n := 16
 
