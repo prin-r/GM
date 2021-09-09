@@ -145,7 +145,7 @@ func main() {
 	// 	return
 	// }
 
-	n := 8
+	n := 16
 
 	current := time.Now().UnixNano()
 	var wg sync.WaitGroup
