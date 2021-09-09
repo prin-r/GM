@@ -146,13 +146,13 @@ func main() {
 	data = append(data, moonstoneID...)
 	data = append(data, nonce...)
 
-	getVal(maxInt, data, status)
+	// getVal(maxInt, data, status)
 
-	if 0 == 0 {
-		return
-	}
+	// if 0 == 0 {
+	// 	return
+	// }
 
-	n := 16
+	n := 32
 
 	current := time.Now().UnixNano()
 	var wg sync.WaitGroup
