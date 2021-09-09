@@ -105,15 +105,15 @@ func getVal(maxInt *big.Int, data []byte, status Status) {
 	hash.Write(append(data, saltBytes...))
 	luck := hash.Sum(nil)
 
-	fmt.Println(hex.EncodeToString(append(data, saltBytes...)))
-	fmt.Println("saltInt -> ", saltInt)
+	// fmt.Println(hex.EncodeToString(append(data, saltBytes...)))
+	// fmt.Println("saltInt -> ", saltInt)
 
 	val := big.NewInt(0)
 	val.SetBytes(luck)
 
 	dv := new(big.Int).Div(maxInt, status.Difficulty)
 
-	fmt.Println("val luck -> ", val)
+	// fmt.Println("val luck -> ", val)
 
 	if val.Cmp(dv) < 1 {
 		fmt.Println("saltInt -> ", saltInt)
