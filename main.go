@@ -31,6 +31,7 @@ type Status struct {
 	Difficulty      *big.Int
 	MaxInt          *big.Int
 	mutex           *sync.RWMutex
+	AggData         []byte
 }
 
 const URL = "https://rpcapi.fantom.network"
@@ -84,45 +85,49 @@ func NewStatus() *Status {
 		Entropy:         []byte{},
 		MaxInt:          maxInt,
 		Difficulty:      big.NewInt(0),
+		AggData:         []byte{},
 	}
 
 	return status
 }
 
-func (s *Status) GetData() []byte {
-	s.mutex.RLock()
+func (status *Status) GetNED() ([]byte, []byte, *big.Int) {
+	status.mutex.RLock()
 	defer func() {
-		s.mutex.RUnlock()
+		status.mutex.RUnlock()
 	}()
+
+	return status.Nonce[:], status.Entropy[:], big.NewInt(0).SetBytes(status.Difficulty.Bytes())
+}
+
+func (status *Status) GetADM() ([]byte, *big.Int, *big.Int) {
+	status.mutex.RLock()
+	defer func() {
+		status.mutex.RUnlock()
+	}()
+
+	return status.AggData[:], big.NewInt(0).SetBytes(status.Difficulty.Bytes()), big.NewInt(0).SetBytes(status.MaxInt.Bytes())
+}
+
+func (status *Status) SetNED(nonceBytes []byte, entropyBytes []byte, difficultyBytes []byte) {
+	status.mutex.Lock()
+	defer func() {
+		status.mutex.Unlock()
+	}()
+
+	status.Nonce = nonceBytes[:]
+	status.Entropy = entropyBytes[:]
+	status.Difficulty = big.NewInt(0).SetBytes(difficultyBytes[:])
 
 	data := []byte{}
-	data = append(data, s.ChainID...)
-	data = append(data, s.Entropy...)
-	data = append(data, s.ContractAddress...)
-	data = append(data, s.SenderAddress...)
-	data = append(data, s.StoneID...)
-	data = append(data, s.Nonce...)
+	data = append(data, status.ChainID...)
+	data = append(data, status.Entropy...)
+	data = append(data, status.ContractAddress...)
+	data = append(data, status.SenderAddress...)
+	data = append(data, status.StoneID...)
+	data = append(data, status.Nonce...)
 
-	return data
-}
-
-func (s *Status) GetDifficulty() *big.Int {
-	s.mutex.RLock()
-	defer func() {
-		s.mutex.RUnlock()
-	}()
-	return s.Difficulty
-}
-
-func (s *Status) SetNED(nonceBytes []byte, entropyBytes []byte, difficultyBytes []byte) {
-	s.mutex.Lock()
-	defer func() {
-		s.mutex.Unlock()
-	}()
-
-	s.Nonce = nonceBytes[:]
-	s.Entropy = entropyBytes[:]
-	s.Difficulty = big.NewInt(0).SetBytes(difficultyBytes[:])
+	status.AggData = data
 }
 
 func callContract(payload string) (CallResult, error) {
@@ -162,7 +167,7 @@ func callContract(payload string) (CallResult, error) {
 	return cr, nil
 }
 
-func (s *Status) KeepUpdate() error {
+func (status *Status) KeepUpdate() error {
 	// for getting status
 	statusPayload := strings.Replace(GET_STATUS_PAYLOAD_TEMPLATE, "$", STONE_ID, 1)
 	statusPayload = strings.Replace(statusPayload, "ß", CONTRACT_ADDRESS, 1)
@@ -210,10 +215,11 @@ func (s *Status) KeepUpdate() error {
 
 		// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-		s.SetNED(nonceBytes, entropyBytes, difficultyBytes)
-		fmt.Println("\nupdate new nonce = ", big.NewInt(0).SetBytes(s.Nonce))
-		fmt.Println("update new difficulty = ", s.Difficulty)
-		fmt.Println("update new entropy = ", hex.EncodeToString(s.Entropy))
+		status.SetNED(nonceBytes, entropyBytes, difficultyBytes)
+		n, e, d := status.GetNED()
+		fmt.Println("\nupdate new nonce = ", big.NewInt(0).SetBytes(n))
+		fmt.Println("update new entropy = ", hex.EncodeToString(e))
+		fmt.Println("update new difficulty = ", d)
 
 		// sleep 10 secs before start the next fetching
 		time.Sleep(10 * time.Second)
@@ -231,7 +237,7 @@ func randomHex(n int) (string, error) {
 }
 
 func getVal(status *Status) {
-	data := status.GetData()
+	aggData, diff, max := status.GetADM()
 	salt, _ := randomHex(30)
 	saltBytes, _ := hex.DecodeString(fmt.Sprintf("%064s", salt))
 
@@ -239,13 +245,13 @@ func getVal(status *Status) {
 	saltInt.SetBytes(saltBytes)
 
 	hash := sha3.NewKeccak256()
-	hash.Write(append(data, saltBytes...))
+	hash.Write(append(aggData, saltBytes...))
 	luck := hash.Sum(nil)
 
 	val := big.NewInt(0)
 	val.SetBytes(luck)
 
-	dv := new(big.Int).Div(status.MaxInt, status.Difficulty)
+	dv := new(big.Int).Div(max, diff)
 
 	if val.Cmp(dv) < 1 {
 		fmt.Println("\n🌝 Success 👉👉 ", val.Cmp(dv) < 1)
@@ -257,13 +263,13 @@ func getVal(status *Status) {
 
 func main() {
 
-	status := NewStatus()
-	go status.KeepUpdate()
+	statusInst := NewStatus()
+	go statusInst.KeepUpdate()
 
-	for status.Difficulty.Cmp(big.NewInt(0)) <= 0 {
+	for statusInst.Difficulty.Cmp(big.NewInt(0)) <= 0 {
 	}
 
-	// status.GetVal()
+	// statusInst.GetVal()
 
 	// if 0 == 0 {
 	// 	return
@@ -278,7 +284,7 @@ func main() {
 		wg.Add(n)
 		for i := 0; i < n; i++ {
 			go func() {
-				getVal(status)
+				getVal(statusInst)
 				wg.Done()
 			}()
 		}
