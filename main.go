@@ -36,20 +36,20 @@ type Status struct {
 
 const URL = "https://rpcapi.fantom.network"
 const CONTRACT_ADDRESS = "342ebf0a5cec4404ccff73a40f9c30288fc72611"
-const SENDER_ADDRESS = "498968c2b945ac37b78414f66167b0786e522636"
-const STONE_ID = "0000000000000000000000000000000000000000000000000000000000000001"
+const SENDER_ADDRESS = "932370760e7dd5F32B5F5B09741e97A23965C14c"
+const STONE_ID = "0000000000000000000000000000000000000000000000000000000000000000"
 const GET_STATUS_PAYLOAD_TEMPLATE = `{
-	"jsonrpc": "2.0",
-	"id": 20,
-	"method": "eth_call",
-	"params": [
-		{
-			"from": "0x0000000000000000000000000000000000000000",
-			"data": "0xa1f0406d$",
-			"to": "0xß"
-		},
-		"latest"
-	]
+    "jsonrpc": "2.0",
+    "id": 20,
+    "method": "eth_call",
+    "params": [
+        {
+            "from": "0x0000000000000000000000000000000000000000",
+            "data": "0xa1f0406d$",
+            "to": "0xß"
+        },
+        "latest"
+    ]
 }`
 
 const GET_NONCE_PAYLOAD_TEMPLATE = `{
@@ -128,6 +128,15 @@ func (status *Status) SetNED(nonceBytes []byte, entropyBytes []byte, difficultyB
 	data = append(data, status.Nonce...)
 
 	status.AggData = data
+
+	fmt.Println("chain id -> ", big.NewInt(0).SetBytes(status.ChainID))
+	fmt.Println("entropy -> ", hex.EncodeToString(status.Entropy))
+	fmt.Println("contract -> ", hex.EncodeToString(status.ContractAddress))
+	fmt.Println("sender -> ", hex.EncodeToString(status.SenderAddress))
+	fmt.Println("stone -> ", big.NewInt(0).SetBytes(status.StoneID))
+	fmt.Println("nonce -> ", big.NewInt(0).SetBytes(status.Nonce))
+	fmt.Println("difficulty -> ", status.Difficulty)
+	fmt.Println("aggdata -> ", hex.EncodeToString(status.AggData))
 }
 
 func callContract(payload string) (CallResult, error) {
@@ -216,10 +225,10 @@ func (status *Status) KeepUpdate() error {
 		// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 		status.SetNED(nonceBytes, entropyBytes, difficultyBytes)
-		n, e, d := status.GetNED()
-		fmt.Println("\nupdate new nonce = ", big.NewInt(0).SetBytes(n))
-		fmt.Println("update new entropy = ", hex.EncodeToString(e))
-		fmt.Println("update new difficulty = ", d)
+		// n, e, d := status.GetNED()
+		// fmt.Println("\nupdate new nonce = ", big.NewInt(0).SetBytes(n))
+		// fmt.Println("update new entropy = ", hex.EncodeToString(e))
+		// fmt.Println("update new difficulty = ", d)
 
 		// sleep 10 secs before start the next fetching
 		time.Sleep(10 * time.Second)
@@ -236,14 +245,32 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func getVal(status *Status) {
-	aggData, diff, max := status.GetADM()
-	salt, _ := randomHex(30)
-	saltBytes, _ := hex.DecodeString(fmt.Sprintf("%064s", salt))
+func claimGem(salt string) {
+	// client := &http.Client{}
+	// mockPayload := `{
+	//     "kind": "$",
+	//     "salt": "ß"
+	// }`
 
-	saltInt := big.NewInt(0)
-	saltInt.SetBytes(saltBytes)
+	// sendPayload := strings.Replace(mockPayload, "$", STONE_ID, 1)
+	// sendPayload = strings.Replace(sendPayload, "ß", salt, 1)
+	// fmt.Println(sendPayload)
 
+	// req, err := http.NewRequest("POST", "http://167.172.73.117:3000/add", strings.NewReader(sendPayload))
+	// if err != nil {
+	// 	fmt.Println("claiming gem error 1. 💥")
+	// }
+	// req.Header.Add("Content-Type", "application/json")
+
+	// _, err = client.Do(req)
+	// if err != nil {
+	// 	fmt.Println("claiming gem error 2. 💥")
+	// }
+}
+
+func calValLuck(aggData []byte, saltBytes []byte) *big.Int {
+	// fmt.Println("aggData ---> ", hex.EncodeToString(aggData))
+	// fmt.Println("saltBytes --->", hex.EncodeToString(saltBytes))
 	hash := sha3.NewKeccak256()
 	hash.Write(append(aggData, saltBytes...))
 	luck := hash.Sum(nil)
@@ -251,31 +278,52 @@ func getVal(status *Status) {
 	val := big.NewInt(0)
 	val.SetBytes(luck)
 
+	return val
+}
+
+func getVal(status *Status) {
+	aggData, diff, max := status.GetADM()
+	salt, _ := randomHex(30)
+	saltPadded := fmt.Sprintf("%064s", salt)
+	saltBytes, _ := hex.DecodeString(saltPadded)
+
+	val := calValLuck(aggData, saltBytes)
+
 	dv := new(big.Int).Div(max, diff)
 
 	if val.Cmp(dv) < 1 {
+		fmt.Println("diff -> ", diff)
 		fmt.Println("\n🌝 Success 👉👉 ", val.Cmp(dv) < 1)
 		fmt.Println("⭐️ ValLuck 👉👉 ", val)
-		fmt.Println("🌞 SaltInt 👉👉 ", saltInt)
-		fmt.Println()
+		fmt.Println("🌞 SaltInt 👉👉 ", big.NewInt(0).SetBytes(saltBytes))
+		fmt.Println("saltPadded -> ", saltPadded)
+		fmt.Println("claiming gem")
 	}
 }
 
 func main() {
 
-	statusInst := NewStatus()
-	go statusInst.KeepUpdate()
+	// ad, _ := hex.DecodeString("00000000000000000000000000000000000000000000000000000000000000fa000080440000047163a56455ac4bc6b1f1b88efadf17db76e5c52c0ca594fd9b342ebf0a5cec4404ccff73a40f9c30288fc72611932370760e7dd5f32b5f5b09741e97a23965c14c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000017")
+	// sp, _ := hex.DecodeString("00004ff48ca9ef06ebebdae3caf2b436e1e778c74f4a902601e9d847301e1435")
+	// vl := calValLuck(ad, sp)
 
-	for statusInst.Difficulty.Cmp(big.NewInt(0)) <= 0 {
-	}
-
-	// statusInst.GetVal()
+	// fmt.Println(vl)
 
 	// if 0 == 0 {
 	// 	return
 	// }
 
-	n := 32
+	statusInst := NewStatus()
+	go statusInst.KeepUpdate()
+
+	for statusInst.Difficulty.Cmp(big.NewInt(0)) <= 0 {
+		_, _, d := statusInst.GetNED()
+		if d.Cmp(big.NewInt(0)) > 0 {
+			break
+		}
+	}
+
+	n := 64
 
 	current := time.Now().UnixNano()
 	var wg sync.WaitGroup
@@ -295,7 +343,7 @@ func main() {
 		// 2 ** 18 - 1 -> 262143
 		// 2 ** 19 - 1 -> 524287
 		// 2 ** 20 - 1 -> 1048575
-		if i&131071 == 0 {
+		if i&1048575 == 0 {
 			fmt.Printf("\riteration %d , time : %d", i, time.Now().UnixNano()-current)
 			current = time.Now().UnixNano()
 		}
