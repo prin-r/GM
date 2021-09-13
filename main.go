@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,12 @@ const GET_NONCE_PAYLOAD_TEMPLATE = `{
     ]
 }`
 
+func cloneBytes(b []byte) []byte {
+	bCopy := make([]byte, len(b))
+	copy(bCopy, b)
+	return bCopy
+}
+
 func NewStatus() *Status {
 	maxInt := new(big.Int)
 	maxInt.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10)
@@ -97,7 +104,7 @@ func (status *Status) GetNED() ([]byte, []byte, *big.Int) {
 		status.mutex.RUnlock()
 	}()
 
-	return status.Nonce[:], status.Entropy[:], big.NewInt(0).SetBytes(status.Difficulty.Bytes())
+	return cloneBytes(status.Nonce), cloneBytes(status.Entropy), big.NewInt(0).Set(status.Difficulty)
 }
 
 func (status *Status) GetADM() ([]byte, *big.Int, *big.Int) {
@@ -106,7 +113,7 @@ func (status *Status) GetADM() ([]byte, *big.Int, *big.Int) {
 		status.mutex.RUnlock()
 	}()
 
-	return status.AggData[:], big.NewInt(0).SetBytes(status.Difficulty.Bytes()), big.NewInt(0).SetBytes(status.MaxInt.Bytes())
+	return cloneBytes(status.AggData), big.NewInt(0).Set(status.Difficulty), big.NewInt(0).Set(status.MaxInt)
 }
 
 func (status *Status) SetNED(nonceBytes []byte, entropyBytes []byte, difficultyBytes []byte) {
@@ -115,17 +122,17 @@ func (status *Status) SetNED(nonceBytes []byte, entropyBytes []byte, difficultyB
 		status.mutex.Unlock()
 	}()
 
-	status.Nonce = nonceBytes[:]
-	status.Entropy = entropyBytes[:]
-	status.Difficulty = big.NewInt(0).SetBytes(difficultyBytes[:])
+	status.Nonce = cloneBytes(nonceBytes)
+	status.Entropy = cloneBytes(entropyBytes)
+	status.Difficulty = big.NewInt(0).SetBytes(cloneBytes(difficultyBytes))
 
 	data := []byte{}
-	data = append(data, status.ChainID...)
-	data = append(data, status.Entropy...)
-	data = append(data, status.ContractAddress...)
-	data = append(data, status.SenderAddress...)
-	data = append(data, status.StoneID...)
-	data = append(data, status.Nonce...)
+	data = append(data, cloneBytes(status.ChainID)...)
+	data = append(data, cloneBytes(status.Entropy)...)
+	data = append(data, cloneBytes(status.ContractAddress)...)
+	data = append(data, cloneBytes(status.SenderAddress)...)
+	data = append(data, cloneBytes(status.StoneID)...)
+	data = append(data, cloneBytes(status.Nonce)...)
 
 	status.AggData = data
 
@@ -225,10 +232,6 @@ func (status *Status) KeepUpdate() error {
 		// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 		status.SetNED(nonceBytes, entropyBytes, difficultyBytes)
-		// n, e, d := status.GetNED()
-		// fmt.Println("\nupdate new nonce = ", big.NewInt(0).SetBytes(n))
-		// fmt.Println("update new entropy = ", hex.EncodeToString(e))
-		// fmt.Println("update new difficulty = ", d)
 
 		// sleep 10 secs before start the next fetching
 		time.Sleep(10 * time.Second)
@@ -245,32 +248,7 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func claimGem(salt string) {
-	// client := &http.Client{}
-	// mockPayload := `{
-	//     "kind": "$",
-	//     "salt": "ß"
-	// }`
-
-	// sendPayload := strings.Replace(mockPayload, "$", STONE_ID, 1)
-	// sendPayload = strings.Replace(sendPayload, "ß", salt, 1)
-	// fmt.Println(sendPayload)
-
-	// req, err := http.NewRequest("POST", "http://167.172.73.117:3000/add", strings.NewReader(sendPayload))
-	// if err != nil {
-	// 	fmt.Println("claiming gem error 1. 💥")
-	// }
-	// req.Header.Add("Content-Type", "application/json")
-
-	// _, err = client.Do(req)
-	// if err != nil {
-	// 	fmt.Println("claiming gem error 2. 💥")
-	// }
-}
-
 func calValLuck(aggData []byte, saltBytes []byte) *big.Int {
-	// fmt.Println("aggData ---> ", hex.EncodeToString(aggData))
-	// fmt.Println("saltBytes --->", hex.EncodeToString(saltBytes))
 	hash := sha3.NewKeccak256()
 	hash.Write(append(aggData, saltBytes...))
 	luck := hash.Sum(nil)
@@ -281,8 +259,7 @@ func calValLuck(aggData []byte, saltBytes []byte) *big.Int {
 	return val
 }
 
-func getVal(status *Status) {
-	aggData, diff, max := status.GetADM()
+func getVal(aggData []byte, diff *big.Int, max *big.Int) {
 	salt, _ := randomHex(30)
 	saltPadded := fmt.Sprintf("%064s", salt)
 	saltBytes, _ := hex.DecodeString(saltPadded)
@@ -292,12 +269,11 @@ func getVal(status *Status) {
 	dv := new(big.Int).Div(max, diff)
 
 	if val.Cmp(dv) < 1 {
-		fmt.Println("diff -> ", diff)
-		fmt.Println("\n🌝 Success 👉👉 ", val.Cmp(dv) < 1)
-		fmt.Println("⭐️ ValLuck 👉👉 ", val)
-		fmt.Println("🌞 SaltInt 👉👉 ", big.NewInt(0).SetBytes(saltBytes))
-		fmt.Println("saltPadded -> ", saltPadded)
-		fmt.Println("claiming gem")
+		ss := "diff -> " + diff.String() + "\n"
+		ss += "🌝 Success 👉👉 " + strconv.FormatBool(val.Cmp(dv) < 1) + "\n"
+		ss += "⭐️ ValLuck 👉👉 " + val.String() + "\n"
+		ss += "🌞 SaltInt 👉👉 " + big.NewInt(0).SetBytes(saltBytes).String() + "\n"
+		fmt.Println(ss)
 	}
 }
 
@@ -316,25 +292,26 @@ func main() {
 	statusInst := NewStatus()
 	go statusInst.KeepUpdate()
 
-	for statusInst.Difficulty.Cmp(big.NewInt(0)) <= 0 {
+	i := 0
+	for -1 < i {
 		_, _, d := statusInst.GetNED()
 		if d.Cmp(big.NewInt(0)) > 0 {
 			break
 		}
 	}
 
-	n := 64
+	n := 512
 
 	current := time.Now().UnixNano()
-	var wg sync.WaitGroup
-	i := 0
 	for -1 < i {
+		aggData, diff, max := statusInst.GetADM()
+		var wg sync.WaitGroup
 		wg.Add(n)
-		for i := 0; i < n; i++ {
-			go func() {
-				getVal(statusInst)
+		for j := 0; j < n; j++ {
+			go func(a []byte, d *big.Int, m *big.Int) {
+				getVal(a, d, m)
 				wg.Done()
-			}()
+			}(aggData, diff, max)
 		}
 		wg.Wait()
 		i += n
